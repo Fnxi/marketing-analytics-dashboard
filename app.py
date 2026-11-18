@@ -57,34 +57,34 @@ def _inject_styles() -> None:
 
 
 def _render_navigation() -> str:
-    """Render stable sidebar navigation and return the selected view."""
+    """Render stable sidebar buttons and return the selected view."""
     insight_views = (CROSS_CHANNEL, EXECUTIVE_SUMMARY, CHANNEL_PERFORMANCE, CHANNEL_SEGMENTS)
     paid_media_views = (PAID_SEARCH, PAID_SOCIAL, SEARCH_ENGINE_OPT, ORGANIC_SOCIAL, PROGRAMMATIC, ECOMMERCE)
     if "active_view" not in st.session_state:
         st.session_state["active_view"] = EXECUTIVE_SUMMARY
-    active_view = st.session_state["active_view"]
-    st.session_state["nav_marketing_insights"] = active_view if active_view in insight_views else None
-    st.session_state["nav_paid_media"] = active_view if active_view in paid_media_views else None
 
-    def activate_insight_view() -> None:
-        """Persist an insight-page selection without adding a manual rerun."""
-        selected = st.session_state["nav_marketing_insights"]
-        if selected:
-            st.session_state["active_view"] = selected
-            st.session_state["nav_paid_media"] = None
+    def activate_view(view: str) -> None:
+        """Persist a selected page before Streamlit rebuilds the sidebar."""
+        st.session_state["active_view"] = view
 
-    def activate_paid_media_view() -> None:
-        """Persist a paid-media-page selection without adding a manual rerun."""
-        selected = st.session_state["nav_paid_media"]
-        if selected:
-            st.session_state["active_view"] = selected
-            st.session_state["nav_marketing_insights"] = None
+    def render_navigation_button(view: str) -> None:
+        """Render one invariant navigation button with native active styling."""
+        st.sidebar.button(
+            view,
+            key=f"nav_{view}",
+            type="primary" if st.session_state["active_view"] == view else "secondary",
+            width="stretch",
+            on_click=activate_view,
+            args=(view,),
+        )
 
     st.sidebar.markdown("<div class='brand'><span class='brand-dot'>MA</span> Marketing<br>Analytics</div>", unsafe_allow_html=True)
     st.sidebar.markdown("<div class='side-section'>Marketing Insights</div>", unsafe_allow_html=True)
-    st.sidebar.radio("Marketing Insights", insight_views, index=None, key="nav_marketing_insights", on_change=activate_insight_view, label_visibility="collapsed")
+    for view in insight_views:
+        render_navigation_button(view)
     st.sidebar.markdown("<div class='side-section'>Paid Ads x Google Analytics</div>", unsafe_allow_html=True)
-    st.sidebar.radio("Paid Ads x Google Analytics", paid_media_views, index=None, key="nav_paid_media", on_change=activate_paid_media_view, label_visibility="collapsed")
+    for view in paid_media_views:
+        render_navigation_button(view)
     return st.session_state["active_view"]
 
 
