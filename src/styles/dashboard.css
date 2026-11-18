@@ -8,11 +8,6 @@ section[data-testid="stSidebar"] * { color: #F5F3FB; }
 .brand { font-size: 1.38rem; line-height: 1.05; font-weight: 700; margin: .4rem 0 2.3rem; }
 .brand-dot { color: #EE70BF; }
 .side-section { color: #BDB5DD; font-size: .82rem; margin: 1.5rem 0 .5rem; }
-.side-active { background: #49417F; border-left: 4px solid #F34D9B; margin: 0 -1rem; padding: .7rem 1rem; font-weight: 700; }
-.side-item { color: #DED9EF; font-size: .88rem; padding: .45rem 0  .45rem 1.5rem; }
-section[data-testid="stSidebar"] div[data-testid="stButton"] { margin: 0; }
-section[data-testid="stSidebar"] div[data-testid="stButton"] button { background: transparent; border: 0; border-radius: 0; box-shadow: none; color: #DED9EF; font-size: .88rem; font-weight: 400; justify-content: flex-start; min-height: 0; padding: .45rem 0 .45rem 1.5rem; text-align: left; }
-section[data-testid="stSidebar"] div[data-testid="stButton"] button:hover { background: #3A316B; color: #FFF; }
 .topbar { background: #292055; padding: .35rem .8rem .5rem; margin: -1rem -1.2rem 1rem; }
 .topbar div[data-baseweb="select"] > div, .topbar input { background: #352B67; border-color: #B9B1D5; color: #F9F8FC; border-radius: 8px; }
 .topbar label { display: none; }
