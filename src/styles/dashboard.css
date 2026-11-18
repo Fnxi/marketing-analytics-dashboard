@@ -8,6 +8,42 @@ section[data-testid="stSidebar"] * { color: #F5F3FB; }
 .brand { font-size: 1.38rem; line-height: 1.05; font-weight: 700; margin: .4rem 0 2.3rem; }
 .brand-dot { color: #EE70BF; }
 .side-section { color: #BDB5DD; font-size: .82rem; margin: 1.5rem 0 .5rem; }
+/* Navigation buttons: scoped to the sidebar so dashboard controls are untouched. */
+section[data-testid="stSidebar"] div[data-testid="stButton"] > button {
+  align-items: center;
+  background: #33285F;
+  border: 1px solid #4A3C78;
+  border-radius: 6px;
+  box-shadow: none;
+  color: #F7F4FF;
+  justify-content: flex-start;
+  min-height: 36px;
+  padding: 0 12px;
+  text-align: left;
+}
+section[data-testid="stSidebar"] div[data-testid="stButton"] > button p,
+section[data-testid="stSidebar"] div[data-testid="stButton"] > button span {
+  color: #F7F4FF !important;
+  font-size: .88rem;
+  font-weight: 500;
+}
+section[data-testid="stSidebar"] div[data-testid="stButton"] > button[kind="primary"] {
+  background: #7B3FE4;
+  border-color: #A77BFF;
+}
+section[data-testid="stSidebar"] div[data-testid="stButton"] > button:hover {
+  background: #40336F;
+  border-color: #6B5B9C;
+  color: #FFFFFF;
+}
+section[data-testid="stSidebar"] div[data-testid="stButton"] > button[kind="primary"]:hover {
+  background: #6C32D4;
+  border-color: #B38BFF;
+}
+section[data-testid="stSidebar"] div[data-testid="stButton"] > button:focus-visible {
+  outline: 2px solid #CDB7FF;
+  outline-offset: 2px;
+}
 .topbar { background: #292055; padding: .35rem .8rem .5rem; margin: -1rem -1.2rem 1rem; }
 .topbar div[data-baseweb="select"] > div, .topbar input { background: #352B67; border-color: #B9B1D5; color: #F9F8FC; border-radius: 8px; }
 .topbar label { display: none; }
