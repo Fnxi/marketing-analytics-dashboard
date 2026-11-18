@@ -13,9 +13,35 @@ from src.components.charts import render_channel_trends
 from src.components.kpi_cards import render_kpi_card
 from src.components.tables import render_performance_table
 from src.data.repository import load_marketing_dataset
+from src.navigation import (
+    CHANNEL_PERFORMANCE,
+    CHANNEL_SEGMENTS,
+    CHANNEL_VIEW_NAMES,
+    CROSS_CHANNEL,
+    ECOMMERCE,
+    EXECUTIVE_SUMMARY,
+    INFORMATIONAL_VIEWS,
+    ORGANIC_SOCIAL,
+    PAID_SEARCH,
+    PAID_SOCIAL,
+    PROGRAMMATIC,
+    SEARCH_ENGINE_OPT,
+    apply_channel_scope,
+)
 
 
 st.set_page_config(page_title="Marketing Analytics", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
+
+KPI_DEFINITIONS = (
+    ("Spend", "spend"), ("CPM", "cpm"), ("CTR", "ctr"), ("CPC", "cpc"),
+    ("Video Views", "video_views"), ("Impressions", "impressions"),
+    ("Conversions", "conversions"), ("Conversion Rate", "conversion_rate"),
+)
+INFORMATIONAL_COPY = {
+    SEARCH_ENGINE_OPT: ("Search Engine Optimization", "Esta fuente no incluye una clasificación SEO, palabras clave orgánicas, rankings ni sesiones de búsqueda.", "Para habilitar este análisis se necesitarían datos de rendimiento SEO y búsqueda orgánica."),
+    ORGANIC_SOCIAL: ("Organic Social", "El dataset contiene tráfico Organic agregado, pero no identifica plataformas o publicaciones de redes sociales orgánicas.", "Para habilitar este análisis se necesitarían datos orgánicos por red social, publicación y audiencia."),
+    ECOMMERCE: ("eCommerce", "Hay conversiones y revenue, pero no existen pedidos, productos, categorías, clientes ni eventos de carrito.", "Para habilitar este análisis se necesitarían datos transaccionales y de catálogo."),
+}
 
 
 @st.cache_resource
@@ -30,29 +56,38 @@ def _inject_styles() -> None:
     st.markdown(path.read_text(encoding="utf-8"), unsafe_allow_html=True)
 
 
-def _render_navigation() -> None:
-    """Render the static visual navigation shown in the reference layout."""
+def _navigation_item(view: str) -> None:
+    """Render a sidebar item that persists the active view across reruns."""
+    if st.session_state["active_view"] == view:
+        st.sidebar.markdown(f"<div class='side-active'>{view}</div>", unsafe_allow_html=True)
+    elif st.sidebar.button(view, key=f"nav_{view}", use_container_width=True):
+        st.session_state["active_view"] = view
+        st.rerun()
+
+
+def _render_navigation() -> str:
+    """Render functional sidebar navigation and return the selected view."""
+    if "active_view" not in st.session_state:
+        st.session_state["active_view"] = EXECUTIVE_SUMMARY
     st.sidebar.markdown("<div class='brand'><span class='brand-dot'>MA</span> Marketing<br>Analytics</div>", unsafe_allow_html=True)
     st.sidebar.markdown("<div class='side-section'>Marketing Insights</div>", unsafe_allow_html=True)
-    st.sidebar.markdown("<div class='side-item'>Cross Channel</div><div class='side-active'>Executive Summary</div><div class='side-item'>Channel Performance</div><div class='side-item'>Channel Segments &amp; Trends</div>", unsafe_allow_html=True)
+    for view in (CROSS_CHANNEL, EXECUTIVE_SUMMARY, CHANNEL_PERFORMANCE, CHANNEL_SEGMENTS):
+        _navigation_item(view)
     st.sidebar.markdown("<div class='side-section'>Paid Ads x Google Analytics</div>", unsafe_allow_html=True)
-    for item in ("Paid Search", "Paid Social", "Search Engine Opt.", "Organic Social", "Programmatic", "eCommerce"):
-        st.sidebar.markdown(f"<div class='side-item'>{item}</div>", unsafe_allow_html=True)
+    for view in (PAID_SEARCH, PAID_SOCIAL, SEARCH_ENGINE_OPT, ORGANIC_SOCIAL, PROGRAMMATIC, ECOMMERCE):
+        _navigation_item(view)
+    return st.session_state["active_view"]
 
 
 def _filter_ids(options: pd.DataFrame, id_column: str, name_column: str, label: str) -> list[str]:
-    """Render name-based selection and return matching dimension IDs."""
-    selected = st.multiselect(label, options[name_column].tolist(), placeholder=label)
+    """Render a persistent name-based selection and return matching IDs."""
+    selected = st.multiselect(label, options[name_column].tolist(), placeholder=label, key=f"filter_{label}")
     return options.loc[options[name_column].isin(selected), id_column].tolist()
 
 
-def main() -> None:
-    """Render a responsive, filter-connected dashboard."""
-    _inject_styles()
-    _render_navigation()
-    dataset = get_dataset()
+def _render_global_filters(dataset) -> FilterCriteria:
+    """Render the shared filters once and return their global selection."""
     fact = dataset.daily_performance
-
     st.markdown("<div class='topbar'>", unsafe_allow_html=True)
     source_col, channel_col, campaign_col, ad_set_col, date_col = st.columns([1.15, 1.15, 1.25, 1.15, 1.2])
     with source_col:
@@ -72,43 +107,120 @@ def main() -> None:
     with date_col:
         selected_dates = st.date_input(
             "Date Range", value=(pd.Timestamp("2023-01-01").date(), pd.Timestamp("2023-12-31").date()),
-            min_value=fact.date.min().date(), max_value=fact.date.max().date(),
+            min_value=fact.date.min().date(), max_value=fact.date.max().date(), key="filter_date_range",
         )
     st.markdown("</div>", unsafe_allow_html=True)
     start_date, end_date = selected_dates if isinstance(selected_dates, tuple) and len(selected_dates) == 2 else (selected_dates, selected_dates)
-    criteria = FilterCriteria(start_date, end_date, source_ids, channel_ids, campaign_ids, ad_set_ids)
+    return FilterCriteria(start_date, end_date, source_ids, channel_ids, campaign_ids, ad_set_ids)
 
+
+def _render_kpis(kpi_data: pd.DataFrame, daily_trends: pd.DataFrame) -> None:
+    """Render the existing eight-card KPI layout."""
+    for start in range(0, len(KPI_DEFINITIONS), 4):
+        columns = st.columns(4, gap="medium")
+        for column, (label, metric) in zip(columns, KPI_DEFINITIONS[start:start + 4], strict=True):
+            with column:
+                values = kpi_data.loc[metric]
+                prior_value = float(values["previous_value"])
+                variation = None if prior_value == 0 else float(values["variation_pct"])
+                render_kpi_card(label, metric, float(values["value"]), variation, daily_trends)
+
+
+def _render_executive_summary(dashboard, daily_trends: pd.DataFrame) -> None:
+    """Render the existing executive dashboard unchanged in composition."""
     st.markdown("<div class='dashboard-title'>Executive Summary</div>", unsafe_allow_html=True)
-    current = filter_daily_performance(fact, criteria)
-    dashboard = build_dashboard_aggregations(dataset, criteria)
-    daily_trends = build_daily_metric_trends(current)
-    kpi_data = dashboard.kpis.set_index("metric")
-
     primary, secondary = st.columns([1.66, 1.14], gap="large")
     with primary:
-        kpis = [("Spend", "spend"), ("CPM", "cpm"), ("CTR", "ctr"), ("CPC", "cpc"), ("Video Views", "video_views"), ("Impressions", "impressions"), ("Conversions", "conversions"), ("Conversion Rate", "conversion_rate")]
-        for start in range(0, len(kpis), 4):
-            columns = st.columns(4, gap="medium")
-            for column, (label, metric) in zip(columns, kpis[start:start + 4], strict=True):
-                with column:
-                    values = kpi_data.loc[metric]
-                    prior_value = float(values["previous_value"])
-                    variation = None if prior_value == 0 else float(values["variation_pct"])
-                    render_kpi_card(label, metric, float(values["value"]), variation, daily_trends)
+        _render_kpis(dashboard.kpis.set_index("metric"), daily_trends)
         render_channel_trends(dashboard.monthly_channel_trends)
     with secondary:
-        render_performance_table("Channel Performance", dashboard.channel_performance, [
-            ("channel_name", "Channel", ""), ("spend", "Spend", "spend"), ("impressions", "Impressions", "impressions"),
-            ("clicks", "Clicks", "clicks"), ("ctr", "CTR", "ctr"), ("cpc", "CPC", "cpc"), ("conversions", "Conversions", "conversions"),
-        ], height=195)
-        render_performance_table("Data Source Performance", dashboard.data_source_performance, [
-            ("data_source_name", "Data Source", ""), ("spend", "Spend", "spend"), ("impressions", "Impressions", "impressions"),
-            ("clicks", "Clicks", "clicks"), ("ctr", "CTR", "ctr"), ("conversions", "Conversions", "conversions"),
-        ], height=250)
-        render_performance_table("Campaign Performance", dashboard.campaign_performance, [
-            ("campaign_name", "Campaign", ""), ("channel_name", "Channel", ""), ("spend", "Spend", "spend"),
-            ("impressions", "Impressions", "impressions"), ("clicks", "Clicks", "clicks"), ("ctr", "CTR", "ctr"), ("conversions", "Conversions", "conversions"),
-        ], height=305)
+        render_performance_table("Channel Performance", dashboard.channel_performance, [("channel_name", "Channel", ""), ("spend", "Spend", "spend"), ("impressions", "Impressions", "impressions"), ("clicks", "Clicks", "clicks"), ("ctr", "CTR", "ctr"), ("cpc", "CPC", "cpc"), ("conversions", "Conversions", "conversions")], height=195)
+        render_performance_table("Data Source Performance", dashboard.data_source_performance, [("data_source_name", "Data Source", ""), ("spend", "Spend", "spend"), ("impressions", "Impressions", "impressions"), ("clicks", "Clicks", "clicks"), ("ctr", "CTR", "ctr"), ("conversions", "Conversions", "conversions")], height=250)
+        render_performance_table("Campaign Performance", dashboard.campaign_performance, [("campaign_name", "Campaign", ""), ("channel_name", "Channel", ""), ("spend", "Spend", "spend"), ("impressions", "Impressions", "impressions"), ("clicks", "Clicks", "clicks"), ("ctr", "CTR", "ctr"), ("conversions", "Conversions", "conversions")], height=305)
+
+
+def _render_cross_channel(dashboard) -> None:
+    """Render a concise comparison of all channels and their monthly trends."""
+    st.markdown("<div class='dashboard-title'>Cross Channel</div>", unsafe_allow_html=True)
+    render_performance_table("Channel Performance", dashboard.channel_performance, [("channel_name", "Channel", ""), ("spend", "Spend", "spend"), ("impressions", "Impressions", "impressions"), ("clicks", "Clicks", "clicks"), ("ctr", "CTR", "ctr"), ("cpc", "CPC", "cpc"), ("conversions", "Conversions", "conversions")], height=220)
+    render_channel_trends(dashboard.monthly_channel_trends)
+
+
+def _render_channel_performance(dashboard) -> None:
+    """Render detailed channel results with supporting source context."""
+    st.markdown("<div class='dashboard-title'>Channel Performance</div>", unsafe_allow_html=True)
+    render_performance_table("Performance by Channel", dashboard.channel_performance, [("channel_name", "Channel", ""), ("spend", "Spend", "spend"), ("impressions", "Impressions", "impressions"), ("clicks", "Clicks", "clicks"), ("ctr", "CTR", "ctr"), ("cpc", "CPC", "cpc"), ("conversions", "Conversions", "conversions")], height=235)
+    left, right = st.columns([1.45, 1], gap="large")
+    with left:
+        render_channel_trends(dashboard.monthly_channel_trends)
+    with right:
+        render_performance_table("Data Source Performance", dashboard.data_source_performance, [("data_source_name", "Data Source", ""), ("spend", "Spend", "spend"), ("impressions", "Impressions", "impressions"), ("ctr", "CTR", "ctr"), ("conversions", "Conversions", "conversions")], height=430)
+
+
+def _render_segments_and_trends(dashboard) -> None:
+    """Render monthly trends alongside campaign and source performance slices."""
+    st.markdown("<div class='dashboard-title'>Channel Segments &amp; Trends</div>", unsafe_allow_html=True)
+    render_channel_trends(dashboard.monthly_channel_trends)
+    left, right = st.columns(2, gap="large")
+    with left:
+        render_performance_table("Campaign Performance", dashboard.campaign_performance, [("campaign_name", "Campaign", ""), ("channel_name", "Channel", ""), ("spend", "Spend", "spend"), ("impressions", "Impressions", "impressions"), ("ctr", "CTR", "ctr"), ("conversions", "Conversions", "conversions")], height=310)
+    with right:
+        render_performance_table("Data Source Performance", dashboard.data_source_performance, [("data_source_name", "Data Source", ""), ("spend", "Spend", "spend"), ("impressions", "Impressions", "impressions"), ("ctr", "CTR", "ctr"), ("conversions", "Conversions", "conversions")], height=310)
+
+
+def _render_channel_drilldown(view: str, dashboard, daily_trends: pd.DataFrame) -> None:
+    """Render a scoped channel drill-down using the established components."""
+    st.markdown(f"<div class='dashboard-title'>{view}</div>", unsafe_allow_html=True)
+    _render_kpis(dashboard.kpis.set_index("metric"), daily_trends)
+    left, right = st.columns([1.2, 1], gap="large")
+    with left:
+        render_channel_trends(dashboard.monthly_channel_trends)
+    with right:
+        render_performance_table("Campaign Performance", dashboard.campaign_performance, [("campaign_name", "Campaign", ""), ("spend", "Spend", "spend"), ("impressions", "Impressions", "impressions"), ("clicks", "Clicks", "clicks"), ("ctr", "CTR", "ctr"), ("conversions", "Conversions", "conversions")], height=465)
+        render_performance_table("Data Source Performance", dashboard.data_source_performance, [("data_source_name", "Data Source", ""), ("spend", "Spend", "spend"), ("impressions", "Impressions", "impressions"), ("ctr", "CTR", "ctr")], height=230)
+
+
+def _render_informational_view(view: str) -> None:
+    """Explain why an approved informational view does not show invented metrics."""
+    title, current_limit, required_data = INFORMATIONAL_COPY[view]
+    st.markdown(f"<div class='dashboard-title'>{title}</div>", unsafe_allow_html=True)
+    st.info(f"**Datos no disponibles para este análisis.** {current_limit}")
+    st.caption(required_data)
+
+
+def main() -> None:
+    """Render one selected navigation view with shared, persistent global filters."""
+    _inject_styles()
+    view = _render_navigation()
+    dataset = get_dataset()
+    global_criteria = _render_global_filters(dataset)
+    if view in INFORMATIONAL_VIEWS:
+        _render_informational_view(view)
+        return
+
+    scope_ids: tuple[str, ...] | None = None
+    if view in CHANNEL_VIEW_NAMES:
+        channel_name = CHANNEL_VIEW_NAMES[view]
+        scope_ids = tuple(dataset.channels.loc[dataset.channels["channel_name"] == channel_name, "channel_id"])
+    criteria = apply_channel_scope(global_criteria, scope_ids)
+    current = filter_daily_performance(dataset.daily_performance, criteria)
+    if current.empty:
+        st.markdown(f"<div class='dashboard-title'>{view}</div>", unsafe_allow_html=True)
+        st.info("No hay resultados para la combinación actual de filtros y el alcance de esta vista.")
+        return
+
+    dashboard = build_dashboard_aggregations(dataset, criteria)
+    daily_trends = build_daily_metric_trends(current)
+    if view == EXECUTIVE_SUMMARY:
+        _render_executive_summary(dashboard, daily_trends)
+    elif view == CROSS_CHANNEL:
+        _render_cross_channel(dashboard)
+    elif view == CHANNEL_PERFORMANCE:
+        _render_channel_performance(dashboard)
+    elif view == CHANNEL_SEGMENTS:
+        _render_segments_and_trends(dashboard)
+    else:
+        _render_channel_drilldown(view, dashboard, daily_trends)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,9 @@
 """Tests for navigation filter scoping without a Streamlit runtime."""
 
+from src.analytics.aggregations import build_dashboard_aggregations
 from src.analytics.filters import FilterCriteria, filter_daily_performance
 from src.data.generator import generate_marketing_dataset
-from src.navigation import INFORMATIONAL_VIEWS, apply_channel_scope, intersect_ids
+from src.navigation import ANALYTICS_VIEWS, INFORMATIONAL_VIEWS, apply_channel_scope, intersect_ids
 
 
 def test_channel_scope_intersects_with_global_filter() -> None:
@@ -34,3 +35,13 @@ def test_channel_scope_can_produce_no_records() -> None:
 def test_informational_views_are_explicitly_registered() -> None:
     """Views without adequate data are separated from analytical views."""
     assert set(INFORMATIONAL_VIEWS) == {"Search Engine Opt.", "Organic Social", "eCommerce"}
+    assert not set(INFORMATIONAL_VIEWS).intersection(ANALYTICS_VIEWS)
+
+
+def test_cross_channel_data_contains_all_channels_without_filters() -> None:
+    """The unscoped cross-channel dataset includes every available channel."""
+    dataset = generate_marketing_dataset()
+    dashboard = build_dashboard_aggregations(dataset)
+    assert set(dashboard.channel_performance["channel_name"]) == {
+        "Programmatic", "Paid Search", "Paid Social", "Organic"
+    }
